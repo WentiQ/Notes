@@ -1,25 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
+import AsyncStorage from '../../AsyncStorage';
 import { savePin } from '../utils/pin';
+const USER_NAME_KEY = 'USER_NAME';
 
 export default function SettingsScreen() {
   const [pin, setPin] = useState('');
+  const [userName, setUserName] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(USER_NAME_KEY);
+        if (stored) setUserName(stored);
+      } catch {}
+      setLoading(false);
+    })();
+  }, []);
 
   const handleSave = async () => {
+    if (userName.trim().length === 0) {
+      Alert.alert('Error', 'Please enter your name.');
+      return;
+    }
+    await AsyncStorage.setItem(USER_NAME_KEY, userName.trim());
     if (pin.length === 4) {
       await savePin(pin);
-      Alert.alert('Success', 'PIN saved successfully!');
+      Alert.alert('Success', 'Details saved successfully!');
       setPin('');
-    } else {
+    } else if (pin.length > 0) {
       Alert.alert('Error', 'PIN must be 4 digits.');
+      return;
+    } else {
+      Alert.alert('Success', 'Name saved successfully!');
     }
   };
 
+  if (loading) return null;
   return (
     <View style={styles.container}>
       <Text style={styles.title}>⚙️ Settings</Text>
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>App Security</Text>
+        <Text style={styles.sectionTitle}>User Details</Text>
+        <Text style={styles.label}>Enter your primary name (for greetings):</Text>
+        <TextInput
+          style={styles.input}
+          value={userName}
+          onChangeText={setUserName}
+          maxLength={32}
+          placeholder="Your Name"
+          placeholderTextColor="#aaa"
+        />
+        <Text style={[styles.sectionTitle, {marginTop: 24}]}>App Security</Text>
         <Text style={styles.label}>Set a 4-digit PIN to protect your app:</Text>
         <TextInput
           style={styles.input}
@@ -30,7 +63,7 @@ export default function SettingsScreen() {
           placeholder="Enter new PIN"
           placeholderTextColor="#aaa"
         />
-        <Button title="Save PIN" onPress={handleSave} />
+        <Button title="Save Details" onPress={handleSave} />
       </View>
     </View>
   );

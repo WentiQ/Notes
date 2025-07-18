@@ -247,7 +247,9 @@ export default function NoteDetail({
 
         <ScrollView
           style={styles.contentScroll}
-          contentContainerStyle={{ flexGrow: 1 }}
+          contentContainerStyle={{ paddingBottom: 12 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={true}
         >
           {editingContent ? (
             <View style={styles.editInputRow}>
@@ -505,7 +507,6 @@ const styles = StyleSheet.create({
     minHeight: 100,
   },
   contentScroll: {
-    flexGrow: 0,
     marginBottom: 8,
   },
   modalOverlay: {

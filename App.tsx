@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+const USER_NAME_KEY = 'USER_NAME';
 import AsyncStorage from './AsyncStorage';
 import NoteDetail, { Note as NoteType } from './NoteDetail';
 
@@ -48,6 +49,18 @@ export default function App() {
   const [searchMode, setSearchMode] = useState<'file' | 'text'>('file');
   const [searchDropdown, setSearchDropdown] = useState(false);
   const searchInputRef = useRef<TextInput>(null);
+
+  // User name state
+  const [userName, setUserName] = useState('');
+  // Load user name from AsyncStorage
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(USER_NAME_KEY);
+        if (stored) setUserName(stored);
+      } catch {}
+    })();
+  }, []);
 
   // Recursive search helpers
   const flattenNotes = (notesArr: NoteType[], parent: NoteType | null = null): FlatNote[] => {
@@ -252,6 +265,13 @@ export default function App() {
     );
   };
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good Morning';
+    if (hour < 18) return 'Good Afternoon';
+    return 'Good Evening';
+  };
+
   const renderNotesPage = () => (
     <TouchableWithoutFeedback
       onPress={() => {
@@ -266,6 +286,12 @@ export default function App() {
       <View style={{ flex: 1 }}>
         <View style={styles.logoTitleRow}>
           <Image source={logo} style={styles.logoCircular} resizeMode="cover" />
+          <View style={{ marginLeft: 16, justifyContent: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 22, fontWeight: 'bold', textAlign: 'left', marginBottom: 0 }}>{getGreeting()}</Text>
+            {userName ? (
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600', textAlign: 'left', marginTop: 2 }}>{userName}</Text>
+            ) : null}
+          </View>
         </View>
         {/* VSCode-style search bar */}
         <View style={styles.searchBarContainer}>
