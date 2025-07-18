@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TextInput, StyleSheet, Image, TouchableOpacity, Animated } from 'react-native';
 import { checkPin } from '../utils/pin';
 const logo = require('../../assets/logo.png');
 
@@ -17,9 +17,77 @@ export default function PinScreen({ onSuccess }: { onSuccess: () => void }) {
     }
   };
 
+  // Animation for energy release
+  const pulse1 = useRef(new Animated.Value(0)).current;
+  const pulse2 = useRef(new Animated.Value(0)).current;
+  const pulse3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    interface AnimatePulse {
+      (pulse: Animated.Value, delay: number): void;
+    }
+
+    const animatePulse: AnimatePulse = (pulse, delay) => {
+      Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(pulse, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+        toValue: 0,
+        duration: 0,
+        useNativeDriver: true,
+        }),
+      ])
+      ).start();
+    };
+    animatePulse(pulse1, 0);
+    animatePulse(pulse2, 400);
+    animatePulse(pulse3, 800);
+  }, [pulse1, pulse2, pulse3]);
+
   return (
     <View style={styles.container}>
-      <Image source={logo} style={styles.logoLarge} resizeMode="cover" />
+      <View style={styles.logoWrapper}>
+        {/* Animated energy release circles */}
+        <Animated.View
+          style={[
+            styles.energyCircle,
+            {
+              opacity: pulse1.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0] }),
+              transform: [
+                { scale: pulse1.interpolate({ inputRange: [0, 1], outputRange: [1, 2.2] }) },
+              ],
+            },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.energyCircle,
+            {
+              opacity: pulse2.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0] }),
+              transform: [
+                { scale: pulse2.interpolate({ inputRange: [0, 1], outputRange: [1, 2.7] }) },
+              ],
+            },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.energyCircle,
+            {
+              opacity: pulse3.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0] }),
+              transform: [
+                { scale: pulse3.interpolate({ inputRange: [0, 1], outputRange: [1, 3.2] }) },
+              ],
+            },
+          ]}
+        />
+        <Image source={logo} style={styles.logoLarge} resizeMode="cover" />
+      </View>
       <Text style={styles.title}>Enter your PIN</Text>
       <TextInput
         style={styles.input}
@@ -46,11 +114,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#000',
   },
+  logoWrapper: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 32,
+    width: 140,
+    height: 140,
+  },
+  energyCircle: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    borderColor: 'rgba(120,200,255,0.7)',
+    backgroundColor: 'rgba(120,200,255,0.13)',
+  },
   logoLarge: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    marginBottom: 32,
     backgroundColor: '#222',
   },
   title: {
