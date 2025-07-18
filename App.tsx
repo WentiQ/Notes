@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import AsyncStorage from './AsyncStorage';
 import NoteDetail, { Note as NoteType } from './NoteDetail';
 import {
   SafeAreaView,
@@ -20,6 +21,32 @@ export default function App() {
   // Hierarchical notes: each note can have subnotes
   const [note, setNote] = useState('');
   const [notes, setNotes] = useState<NoteType[]>([]);
+  // AsyncStorage key
+  const NOTES_KEY = 'NOTES_DATA';
+  // Load notes from AsyncStorage on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(NOTES_KEY);
+        if (stored) {
+          setNotes(JSON.parse(stored));
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, []);
+
+  // Save notes to AsyncStorage whenever notes change
+  useEffect(() => {
+    (async () => {
+      try {
+        await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, [notes]);
   const [page, setPage] = useState<'Notes' | 'Archive' | 'Settings' | 'Detail'>('Notes');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [noteStack, setNoteStack] = useState<{ note: NoteType; parent: NoteType[] }[]>([]); // For navigation
