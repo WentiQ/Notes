@@ -10,6 +10,7 @@ import {
   Modal,
   BackHandler,
   TouchableWithoutFeedback,
+  Alert,
 } from 'react-native';
 
 export interface Note {
@@ -48,6 +49,13 @@ export default function NoteDetail({
   const [newSubnoteText, setNewSubnoteText] = useState('');
   const [editingName, setEditingName] = useState(editingNameProp);
   const [nameText, setNameText] = useState(note.text);
+
+  // Subnote delete mode state
+  const [subDeleteMode, setSubDeleteMode] = useState(false);
+  const [selectedSubnotes, setSelectedSubnotes] = useState<string[]>([]);
+  const [deleteConfirmSubnote, setDeleteConfirmSubnote] = useState<null | Note>(null);
+  const [deleteSubInput, setDeleteSubInput] = useState('');
+  const [deleteSubQueue, setDeleteSubQueue] = useState<Note[]>([]);
 
   useEffect(() => {
     const backAction = () => {
@@ -126,6 +134,43 @@ export default function NoteDetail({
       }
       setEditingName(false);
     }
+  };
+
+  const startDeleteSubQueue = () => {
+    if (selectedSubnotes.length === 0) return;
+    const queue = selectedSubnotes
+      .map(id => note.subnotes.find(n => n.id === id))
+      .filter(Boolean) as Note[];
+    if (queue.length > 0) {
+      setDeleteSubQueue(queue);
+      setDeleteConfirmSubnote(queue[0]);
+      setDeleteSubInput('');
+    }
+  };
+
+  const handleDeleteSubnotes = () => {
+    if (!deleteConfirmSubnote) return;
+    if (deleteSubInput !== deleteConfirmSubnote.text) {
+      Alert.alert('Name does not match', 'Please type the subnote name exactly to confirm deletion.');
+      return;
+    }
+    // Remove subnote
+    const updatedSubnotes = note.subnotes.filter(n => n.id !== deleteConfirmSubnote.id);
+    onUpdateNote({ ...note, subnotes: updatedSubnotes });
+    setSelectedSubnotes(sel => sel.filter(id => id !== deleteConfirmSubnote.id));
+    setDeleteSubInput('');
+    setTimeout(() => {
+      setDeleteSubQueue(q => {
+        const nextQueue = q.filter(n => n.id !== deleteConfirmSubnote.id);
+        if (nextQueue.length > 0) {
+          setDeleteConfirmSubnote(nextQueue[0]);
+        } else {
+          setDeleteConfirmSubnote(null);
+          setSubDeleteMode(false);
+        }
+        return nextQueue;
+      });
+    }, 0);
   };
 
   if (currentSubnote) {
@@ -244,11 +289,31 @@ export default function NoteDetail({
                       <TouchableOpacity
                         style={{ flex: 1 }}
                         onPress={() => {
-                          setShowSubnotesModal(false);
-                          setCurrentSubnote(item);
+                          if (subDeleteMode) {
+                            setSelectedSubnotes(sel =>
+                              sel.includes(item.id)
+                                ? sel.filter(id => id !== item.id)
+                                : [...sel, item.id]
+                            );
+                          } else {
+                            setShowSubnotesModal(false);
+                            setCurrentSubnote(item);
+                          }
+                        }}
+                        onLongPress={() => {
+                          if (!subDeleteMode) {
+                            setSubDeleteMode(true);
+                            setSelectedSubnotes([item.id]);
+                          } else {
+                            setSelectedSubnotes(sel =>
+                              sel.includes(item.id)
+                                ? sel.filter(id => id !== item.id)
+                                : [...sel, item.id]
+                            );
+                          }
                         }}
                       >
-                        <Text style={styles.modalNoteText}>{item.text}</Text>
+                        <Text style={[styles.modalNoteText, subDeleteMode && selectedSubnotes.includes(item.id) && { color: '#f44', fontWeight: 'bold' }]}>{item.text}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         onPress={() => {
@@ -301,6 +366,14 @@ export default function NoteDetail({
                     <Text style={styles.modalAddButtonText}>Add Subnote</Text>
                   </TouchableOpacity>
                 )}
+                {subDeleteMode && selectedSubnotes.length > 0 && (
+                  <TouchableOpacity
+                    style={[styles.deleteButton, { marginTop: 8 }]}
+                    onPress={startDeleteSubQueue}
+                  >
+                    <Text style={styles.deleteButtonText}>Delete Selected ({selectedSubnotes.length})</Text>
+                  </TouchableOpacity>
+                )}
               </View>
               <TouchableOpacity
                 onPress={() => setShowSubnotesModal(false)}
@@ -310,6 +383,50 @@ export default function NoteDetail({
               </TouchableOpacity>
             </View>
           </View>
+          {/* Subnote delete confirmation modal */}
+          <Modal
+            visible={!!deleteConfirmSubnote}
+            transparent
+            animationType="fade"
+            onRequestClose={() => {
+              setDeleteConfirmSubnote(null);
+              setDeleteSubInput('');
+              setDeleteSubQueue([]);
+            }}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Type the subnote name to confirm deletion</Text>
+                <Text style={{ color: '#fff', marginBottom: 8, textAlign: 'center' }}>{deleteConfirmSubnote?.text}</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={deleteSubInput}
+                  onChangeText={setDeleteSubInput}
+                  placeholder="Type subnote name exactly"
+                  placeholderTextColor="#aaa"
+                  autoFocus
+                />
+                <View style={{ flexDirection: 'row', marginTop: 16, justifyContent: 'center' }}>
+                  <TouchableOpacity
+                    style={[styles.modalAddButton, { backgroundColor: '#f44', marginRight: 10 }]}
+                    onPress={handleDeleteSubnotes}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Delete</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.modalCloseButton}
+                    onPress={() => {
+                      setDeleteConfirmSubnote(null);
+                      setDeleteSubInput('');
+                      setDeleteSubQueue([]);
+                    }}
+                  >
+                    <Text style={styles.modalCloseText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
         </Modal>
       </View>
     </TouchableWithoutFeedback>
@@ -452,6 +569,18 @@ const styles = StyleSheet.create({
   },
   modalAddButtonText: {
     color: '#000',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  deleteButton: {
+    backgroundColor: '#f44',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    alignSelf: 'center',
+  },
+  deleteButtonText: {
+    color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
   },

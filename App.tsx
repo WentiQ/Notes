@@ -15,6 +15,9 @@ import {
   TouchableOpacity,
   Image,
   Keyboard,
+  TouchableWithoutFeedback,
+  Alert,
+  Modal as RNModal,
 } from 'react-native';
 
 // Import the logo image
@@ -32,6 +35,10 @@ export default function App() {
   const [flowChartRoot, setFlowChartRoot] = useState<NoteType | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [noteStack, setNoteStack] = useState<{ note: NoteType; parent: NoteType[] }[]>([]); // For navigation
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
+  const [deleteConfirmNote, setDeleteConfirmNote] = useState<null | NoteType>(null);
+  const [deleteInput, setDeleteInput] = useState('');
 
   // Check PIN on mount
   useEffect(() => {
@@ -137,8 +144,33 @@ export default function App() {
       keyExtractor={item => item.id}
       renderItem={({ item }) => (
         <View style={styles.noteRow}>
-          <TouchableOpacity style={{ flex: 1 }} onPress={() => onNotePress(item, notesArr)}>
-            <Text style={styles.noteText}>{item.text}</Text>
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            onPress={() => {
+              if (deleteMode) {
+                setSelectedNotes(sel =>
+                  sel.includes(item.id)
+                    ? sel.filter(id => id !== item.id)
+                    : [...sel, item.id]
+                );
+              } else {
+                onNotePress(item, notesArr);
+              }
+            }}
+            onLongPress={() => {
+              if (!deleteMode) {
+                setDeleteMode(true);
+                setSelectedNotes([item.id]);
+              } else {
+                setSelectedNotes(sel =>
+                  sel.includes(item.id)
+                    ? sel.filter(id => id !== item.id)
+                    : [...sel, item.id]
+                );
+              }
+            }}
+          >
+            <Text style={[styles.noteText, deleteMode && selectedNotes.includes(item.id) && { color: '#f44', fontWeight: 'bold' }]}>{item.text}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => {
@@ -175,22 +207,43 @@ export default function App() {
   };
 
   const renderNotesPage = () => (
-    <>
-      <View style={styles.logoTitleRow}>
-        <Image source={logo} style={styles.logoCircular} resizeMode="cover" />
+    <TouchableWithoutFeedback
+      onLongPress={() => {
+        if (!deleteMode) setDeleteMode(true);
+      }}
+      onPress={() => {
+        if (deleteMode) {
+          setDeleteMode(false);
+          setSelectedNotes([]);
+        }
+      }}
+      accessible={false}
+    >
+      <View style={{ flex: 1 }}>
+        <View style={styles.logoTitleRow}>
+          <Image source={logo} style={styles.logoCircular} resizeMode="cover" />
+        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Write a note..."
+          placeholderTextColor="#aaa"
+          value={note}
+          onChangeText={setNote}
+        />
+        {renderNotesList(notes, (note, parent) => {
+          setNoteStack([{ note, parent }]);
+          setPage('Detail');
+        })}
+        {deleteMode && selectedNotes.length > 0 && (
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={startDeleteQueue}
+          >
+            <Text style={styles.deleteButtonText}>Delete Selected ({selectedNotes.length})</Text>
+          </TouchableOpacity>
+        )}
       </View>
-      <TextInput
-        style={styles.input}
-        placeholder="Write a note..."
-        placeholderTextColor="#aaa"
-        value={note}
-        onChangeText={setNote}
-      />
-      {renderNotesList(notes, (note, parent) => {
-        setNoteStack([{ note, parent }]);
-        setPage('Detail');
-      })}
-    </>
+    </TouchableWithoutFeedback>
   );
 
   // Helper to update a note in the notes tree
@@ -263,6 +316,45 @@ export default function App() {
     }, 0);
   };
 
+  // Delete selected notes after confirmation (multi-step)
+  const [deleteQueue, setDeleteQueue] = useState<NoteType[]>([]);
+
+  const startDeleteQueue = () => {
+    if (selectedNotes.length === 0) return;
+    const queue = selectedNotes
+      .map(id => notes.find(n => n.id === id))
+      .filter(Boolean) as NoteType[];
+    if (queue.length > 0) {
+      setDeleteQueue(queue);
+      setDeleteConfirmNote(queue[0]);
+      setDeleteInput('');
+    }
+  };
+
+  const handleDeleteNotes = () => {
+    if (!deleteConfirmNote) return;
+    if (deleteInput !== deleteConfirmNote.text) {
+      Alert.alert('Name does not match', 'Please type the note name exactly to confirm deletion.');
+      return;
+    }
+    setNotes(prev => prev.filter(n => n.id !== deleteConfirmNote.id));
+    setSelectedNotes(sel => sel.filter(id => id !== deleteConfirmNote.id));
+    setDeleteInput('');
+    // Remove from queue and move to next
+    setTimeout(() => {
+      setDeleteQueue(q => {
+        const nextQueue = q.filter(n => n.id !== deleteConfirmNote.id);
+        if (nextQueue.length > 0) {
+          setDeleteConfirmNote(nextQueue[0]);
+        } else {
+          setDeleteConfirmNote(null);
+          setDeleteMode(false);
+        }
+        return nextQueue;
+      });
+    }, 0);
+  };
+
   if (loading) return null;
   if (locked) {
     return <PinScreen onSuccess={() => setLocked(false)} />;
@@ -306,6 +398,51 @@ export default function App() {
           })}
         </View>
       )}
+
+      {/* Delete confirmation modal */}
+      <RNModal
+        visible={!!deleteConfirmNote}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setDeleteConfirmNote(null);
+          setDeleteInput('');
+          setDeleteQueue([]);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Type the note name to confirm deletion</Text>
+            <Text style={{ color: '#fff', marginBottom: 8, textAlign: 'center' }}>{deleteConfirmNote?.text}</Text>
+            <TextInput
+              style={styles.input}
+              value={deleteInput}
+              onChangeText={setDeleteInput}
+              placeholder="Type note name exactly"
+              placeholderTextColor="#aaa"
+              autoFocus
+            />
+            <View style={{ flexDirection: 'row', marginTop: 16, justifyContent: 'center' }}>
+              <TouchableOpacity
+                style={[styles.modalAddButton, { backgroundColor: '#f44', marginRight: 10 }]}
+                onPress={handleDeleteNotes}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Delete</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => {
+                  setDeleteConfirmNote(null);
+                  setDeleteInput('');
+                  setDeleteQueue([]);
+                }}
+              >
+                <Text style={styles.modalCloseText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </RNModal>
     </SafeAreaView>
   );
 }
@@ -423,5 +560,56 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: 'bold',
     marginTop: -2,
+  },
+  deleteButton: {
+    backgroundColor: '#f44',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    margin: 16,
+  },
+  deleteButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+  },
+  modalContent: {
+    width: '80%',
+    backgroundColor: '#222',
+    borderRadius: 8,
+    padding: 20,
+    alignItems: 'center',
+    elevation: 4,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    color: '#fff',
+  },
+  modalAddButton: {
+    flex: 1,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  modalCloseButton: {
+    flex: 1,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 10,
+    backgroundColor: '#333',
+  },
+  modalCloseText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });
