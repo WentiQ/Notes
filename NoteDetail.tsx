@@ -24,6 +24,7 @@ export interface NoteDetailProps {
   onUpdateNote: (updatedNote: Note) => void;
   onAddSubnote: (newSubnote: Note) => void;
   onOpenSubnote: (subnote: Note) => void;
+  onOpenFlowChart: (note: Note) => void;
   logo: number;
 }
 
@@ -33,6 +34,7 @@ export default function NoteDetail({
   onUpdateNote,
   onAddSubnote,
   onOpenSubnote,
+  onOpenFlowChart,
   logo,
 }: NoteDetailProps) {
   const [currentSubnote, setCurrentSubnote] = useState<Note | null>(null);
@@ -120,6 +122,7 @@ export default function NoteDetail({
         }}
         onAddSubnote={handleAddSubnoteToCurrent}
         onOpenSubnote={onOpenSubnote}
+        onOpenFlowChart={onOpenFlowChart}
         logo={logo}
       />
     );
@@ -193,16 +196,26 @@ export default function NoteDetail({
                 data={note.subnotes}
                 keyExtractor={item => item.id}
                 renderItem={({ item }) => (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setShowSubnotesModal(false);
-                      setCurrentSubnote(item);
-                    }}
-                  >
-                    <View style={styles.modalNoteItem}>
+                  <View style={styles.modalNoteRow}>
+                    <TouchableOpacity
+                      style={{ flex: 1 }}
+                      onPress={() => {
+                        setShowSubnotesModal(false);
+                        setCurrentSubnote(item);
+                      }}
+                    >
                       <Text style={styles.modalNoteText}>{item.text}</Text>
-                    </View>
-                  </TouchableOpacity>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setShowSubnotesModal(false);
+                        onOpenFlowChart(item);
+                      }}
+                      style={{ marginLeft: 10 }}
+                    >
+                      <Text style={styles.flowChartIcon}>⭕</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
               />
             )}
@@ -357,10 +370,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginVertical: 20,
   },
-  modalNoteItem: {
+  modalNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#444',
+  },
+  flowChartIcon: {
+    fontSize: 20,
+    marginLeft: 10,
+    color: '#6cf',
   },
   modalNoteText: {
     color: '#fff',

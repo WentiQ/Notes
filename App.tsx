@@ -28,7 +28,8 @@ export default function App() {
   const [note, setNote] = useState('');
   const [notes, setNotes] = useState<NoteType[]>([]);
   const NOTES_KEY = 'NOTES_DATA';
-  const [page, setPage] = useState<'Notes' | 'Archive' | 'Settings' | 'Detail'>('Notes');
+  const [page, setPage] = useState<'Notes' | 'Archive' | 'Settings' | 'Detail' | 'FlowChart'>('Notes');
+  const [flowChartRoot, setFlowChartRoot] = useState<NoteType | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [noteStack, setNoteStack] = useState<{ note: NoteType; parent: NoteType[] }[]>([]); // For navigation
 
@@ -107,14 +108,34 @@ export default function App() {
       data={notesArr}
       keyExtractor={item => item.id}
       renderItem={({ item }) => (
-        <TouchableOpacity onPress={() => onNotePress(item, notesArr)}>
-          <View style={styles.note}>
+        <View style={styles.noteRow}>
+          <TouchableOpacity style={{ flex: 1 }} onPress={() => onNotePress(item, notesArr)}>
             <Text style={styles.noteText}>{item.text}</Text>
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              setFlowChartRoot(item);
+              setPage('FlowChart');
+            }}
+            style={{ marginLeft: 10 }}
+          >
+            <Text style={styles.flowChartIcon}>⭕</Text>
+          </TouchableOpacity>
+        </View>
       )}
     />
   );
+  // Render the flow chart page
+  const renderFlowChartPage = () => {
+    if (!flowChartRoot) return null;
+    const FlowChartScreen = require('./src/screens/FlowChartScreen').default;
+    return (
+      <FlowChartScreen
+        route={{ params: { root: flowChartRoot } }}
+        navigation={{ goBack: () => setPage('Notes') }}
+      />
+    );
+  };
 
   const renderNotesPage = () => (
     <>
@@ -182,6 +203,10 @@ export default function App() {
         onOpenSubnote={(subnote: NoteType): void =>
           setNoteStack([...noteStack, { note: subnote, parent: current.note.subnotes }])
         }
+        onOpenFlowChart={(note: NoteType) => {
+          setFlowChartRoot(note);
+          setPage('FlowChart');
+        }}
         logo={logo as number}
       />
     );
@@ -209,10 +234,11 @@ export default function App() {
         {page === 'Detail' && renderDetailPage()}
         {page === 'Archive' && renderArchivePage()}
         {page === 'Settings' && renderSettingsPage()}
+        {page === 'FlowChart' && renderFlowChartPage()}
       </View>
 
       {/* Navigation Bar */}
-      {!keyboardVisible && (
+      {!keyboardVisible && page !== 'FlowChart' && (
         <View style={styles.navBar}>
           {(['Notes', 'Archive', 'Settings'] as const).map(p => {
             const isActive = page === p;
@@ -273,11 +299,19 @@ const styles = StyleSheet.create({
   buttonContainer: {
     marginBottom: 20,
   },
-  note: {
+  noteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 10,
     backgroundColor: '#111',
     borderBottomWidth: 1,
     borderBottomColor: '#222',
+  },
+  flowChartIcon: {
+    fontSize: 20,
+    marginLeft: 10,
+    color: '#6cf',
   },
   noteText: {
     color: '#fff',
