@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AsyncStorage from './AsyncStorage';
 import NoteDetail, { Note as NoteType } from './NoteDetail';
+
+type FlatNote = NoteType & { parent: NoteType | null };
 import PinScreen from './src/screens/PinScreen';
 import { getPin } from './src/utils/pin';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -18,6 +20,7 @@ import {
   TouchableWithoutFeedback,
   Alert,
   Modal as RNModal,
+  ScrollView,
 } from 'react-native';
 
 // Import the logo image
@@ -39,6 +42,34 @@ export default function App() {
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
   const [deleteConfirmNote, setDeleteConfirmNote] = useState<null | NoteType>(null);
   const [deleteInput, setDeleteInput] = useState('');
+
+  // Search state
+  const [search, setSearch] = useState('');
+  const [searchMode, setSearchMode] = useState<'file' | 'text'>('file');
+  const [searchDropdown, setSearchDropdown] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
+
+  // Recursive search helpers
+  const flattenNotes = (notesArr: NoteType[], parent: NoteType | null = null): FlatNote[] => {
+    let out: FlatNote[] = [];
+    for (const n of notesArr) {
+      out.push({ ...n, parent });
+      if (n.subnotes && n.subnotes.length > 0) {
+        out = out.concat(flattenNotes(n.subnotes, n));
+      }
+    }
+    return out;
+  };
+  const allNotesFlat: FlatNote[] = flattenNotes(notes);
+
+  // Go to Note: filter by title
+  const goToNoteResults: FlatNote[] = search.trim()
+    ? allNotesFlat.filter((n: FlatNote) => n.text.toLowerCase().includes(search.toLowerCase()))
+    : [];
+  // Search Text: filter by content
+  const searchTextResults: FlatNote[] = search.trim()
+    ? allNotesFlat.filter((n: FlatNote) => (n.content || '').toLowerCase().includes(search.toLowerCase()))
+    : [];
 
   // Check PIN on mount
   useEffect(() => {
@@ -82,6 +113,21 @@ export default function App() {
       hideSub.remove();
     };
   }, []);
+
+  // Recursive filter for notes and subnotes
+  const filterNotes = (notesArr: NoteType[], query: string): NoteType[] => {
+    if (!query.trim()) return notesArr;
+    const lower = query.toLowerCase();
+    return notesArr
+      .map(n => {
+        const subFiltered = filterNotes(n.subnotes, query);
+        if (n.text.toLowerCase().includes(lower) || subFiltered.length > 0) {
+          return { ...n, subnotes: subFiltered };
+        }
+        return null;
+      })
+      .filter(Boolean) as NoteType[];
+  };
 
   // Add note or subnote depending on context
   const addNote = () => {
@@ -208,10 +254,8 @@ export default function App() {
 
   const renderNotesPage = () => (
     <TouchableWithoutFeedback
-      onLongPress={() => {
-        if (!deleteMode) setDeleteMode(true);
-      }}
       onPress={() => {
+        if (searchDropdown) setSearchDropdown(false);
         if (deleteMode) {
           setDeleteMode(false);
           setSelectedNotes([]);
@@ -223,14 +267,86 @@ export default function App() {
         <View style={styles.logoTitleRow}>
           <Image source={logo} style={styles.logoCircular} resizeMode="cover" />
         </View>
-        <TextInput
-          style={styles.input}
-          placeholder="Write a note..."
-          placeholderTextColor="#aaa"
-          value={note}
-          onChangeText={setNote}
-        />
-        {renderNotesList(notes, (note, parent) => {
+        {/* VSCode-style search bar */}
+        <View style={styles.searchBarContainer}>
+          <TextInput
+            ref={searchInputRef}
+            style={styles.searchBar}
+            placeholder="Search notes or text..."
+            placeholderTextColor="#aaa"
+            value={search}
+            onChangeText={txt => {
+              setSearch(txt);
+              setSearchDropdown(true);
+            }}
+            onFocus={() => setSearchDropdown(true)}
+            onBlur={() => setSearchDropdown(false)}
+            autoCorrect={false}
+            autoCapitalize="none"
+            clearButtonMode="never"
+          />
+          {search.length > 0 && (
+            <TouchableOpacity
+              style={styles.searchClearButton}
+              onPress={() => {
+                setSearch('');
+                searchInputRef.current?.focus();
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.searchClearText}>×</Text>
+            </TouchableOpacity>
+          )}
+          {searchDropdown && (
+            <View style={styles.searchDropdown}>
+              <View style={styles.searchTabs}>
+                <TouchableOpacity
+                  style={[styles.searchTab, searchMode === 'file' && styles.searchTabActive]}
+                  onPress={() => setSearchMode('file')}
+                >
+                  <Text style={styles.searchTabText}>Go to Note</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.searchTab, searchMode === 'text' && styles.searchTabActive]}
+                  onPress={() => setSearchMode('text')}
+                >
+                  <Text style={styles.searchTabText}>Search Text</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ maxHeight: 220 }}>
+                {(searchMode === 'file' ? goToNoteResults : searchTextResults).length === 0 ? (
+                  <Text style={styles.searchNoResult}>No results</Text>
+                ) : (
+                  (searchMode === 'file' ? goToNoteResults : searchTextResults).map((n: FlatNote, idx: number) => (
+                    <TouchableOpacity
+                      key={n.id + idx}
+                      style={styles.searchResultRow}
+                      onPress={() => {
+                        setSearchDropdown(false);
+                        setSearch('');
+                        setTimeout(() => {
+                          setNoteStack([{ note: n, parent: n.parent ? [n.parent] : [] }]);
+                          setPage('Detail');
+                        }, 0);
+                      }}
+                    >
+                      <Text style={styles.searchResultTitle}>{n.text}</Text>
+                      {n.parent && (
+                        <Text style={styles.searchResultParent}>in {n.parent.text}</Text>
+                      )}
+                      {searchMode === 'text' && n.content && (
+                        <Text style={styles.searchResultSnippet}>
+                          ...{n.content.replace(/\n/g, ' ').slice(Math.max(0, n.content.toLowerCase().indexOf(search.toLowerCase()) - 20), n.content.toLowerCase().indexOf(search.toLowerCase()) + 40)}...
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          )}
+        </View>
+        {renderNotesList(filterNotes(notes, search), (note, parent) => {
           setNoteStack([{ note, parent }]);
           setPage('Detail');
         })}
@@ -483,6 +599,104 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 10,
     color: '#fff',
+  },
+  searchBarContainer: {
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#222',
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#444',
+    paddingHorizontal: 10,
+    height: 44,
+    position: 'relative',
+  },
+  searchBar: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 16,
+    paddingVertical: 0,
+    backgroundColor: 'transparent',
+  },
+  searchClearButton: {
+    position: 'absolute',
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  searchClearText: {
+    color: '#aaa',
+    fontSize: 22,
+    fontWeight: 'bold',
+    paddingHorizontal: 2,
+    paddingVertical: 0,
+  },
+  searchDropdown: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: '#222',
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#444',
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  searchTabs: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#444',
+  },
+  searchTab: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  searchTabActive: {
+    backgroundColor: '#333',
+  },
+  searchTabText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  searchResultRow: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  searchResultTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  searchResultParent: {
+    color: '#aaa',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  searchResultSnippet: {
+    color: '#6cf',
+    fontSize: 13,
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  searchNoResult: {
+    color: '#aaa',
+    textAlign: 'center',
+    padding: 16,
   },
   buttonContainer: {
     marginBottom: 20,
