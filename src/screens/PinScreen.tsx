@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, Image, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Image, TouchableOpacity, Animated, Vibration } from 'react-native';
 import { checkPin } from '../utils/pin';
 const logo = require('../../assets/logo.png');
 
@@ -29,6 +29,7 @@ export default function PinScreen({ onSuccess }: { onSuccess: () => void }) {
       setError('Invalid PIN. Try again.');
       setPin('');
       triggerShake();
+      Vibration.vibrate(200);
     }
   };
 
