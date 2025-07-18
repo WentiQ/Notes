@@ -42,7 +42,33 @@ export default function App() {
     return ids;
   };
   // Checklist state for study modal
+  const STUDY_CHECKBOX_KEY = 'STUDY_CHECKBOX_DATA';
   const [studyModalSelected, setStudyModalSelected] = useState<{ [id: string]: boolean }>({});
+
+  // Load studyModalSelected (checkbox state) from AsyncStorage on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(STUDY_CHECKBOX_KEY);
+        if (stored) {
+          setStudyModalSelected(JSON.parse(stored));
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, []);
+
+  // Save studyModalSelected (checkbox state) to AsyncStorage whenever it changes
+  useEffect(() => {
+    (async () => {
+      try {
+        await AsyncStorage.setItem(STUDY_CHECKBOX_KEY, JSON.stringify(studyModalSelected));
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, [studyModalSelected]);
   // Study mode notes modal state
   const [studyNotesModalVisible, setStudyNotesModalVisible] = useState(false);
   // Track the stack of notes being viewed in the modal (for subnotes navigation)
@@ -429,7 +455,33 @@ export default function App() {
   );
 
   // State to hold the selected notes tree for Study mode
+  const STUDY_NOTES_KEY = 'STUDY_NOTES_DATA';
   const [studySelectedTree, setStudySelectedTree] = useState<NoteType[]>([]);
+
+  // Load study notes from AsyncStorage on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(STUDY_NOTES_KEY);
+        if (stored) {
+          setStudySelectedTree(JSON.parse(stored));
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, []);
+
+  // Save study notes to AsyncStorage whenever studySelectedTree changes
+  useEffect(() => {
+    (async () => {
+      try {
+        await AsyncStorage.setItem(STUDY_NOTES_KEY, JSON.stringify(studySelectedTree));
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, [studySelectedTree]);
 
   // Helper to filter a notes tree by selected ids, preserving hierarchy
   const filterNotesBySelected = (notesArr: NoteType[], selected: { [id: string]: boolean }): NoteType[] => {
@@ -450,7 +502,33 @@ export default function App() {
   };
 
   // State to track expanded/collapsed notes in Study page
+  const STUDY_EXPANDED_KEY = 'STUDY_EXPANDED_DATA';
   const [studyExpanded, setStudyExpanded] = useState<{ [id: string]: boolean }>({});
+
+  // Load studyExpanded from AsyncStorage on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(STUDY_EXPANDED_KEY);
+        if (stored) {
+          setStudyExpanded(JSON.parse(stored));
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, []);
+
+  // Save studyExpanded to AsyncStorage whenever it changes
+  useEffect(() => {
+    (async () => {
+      try {
+        await AsyncStorage.setItem(STUDY_EXPANDED_KEY, JSON.stringify(studyExpanded));
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, [studyExpanded]);
 
   // Recursive render for Study page: checklist for every note and subnote, dropdown for subnotes
   const renderStudyNotesList = (notesArr: NoteType[], level: number = 0) => (
@@ -578,7 +656,7 @@ export default function App() {
 
   const renderStudyPage = () => (
     <ScrollView contentContainerStyle={{ paddingBottom: 40 }} horizontal={true}>
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, minWidth: '100%' }}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
           {studySelectedTree.length === 0 ? (
             <Text style={{ color: '#fff', marginTop: 24, textAlign: 'center' }}>Welcome to Study mode!</Text>
