@@ -286,10 +286,10 @@ export default function App() {
       <View style={{ flex: 1 }}>
         <View style={styles.logoTitleRow}>
           <Image source={logo} style={styles.logoCircular} resizeMode="cover" />
-          <View style={{ marginLeft: 16, justifyContent: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 22, fontWeight: 'bold', textAlign: 'left', marginBottom: 0 }}>{getGreeting()}</Text>
+          <View style={{ flex: 1, justifyContent: 'center', marginLeft: 16 }}>
+            <Text style={{ color: '#fff', fontSize: 22, fontWeight: 'bold', textAlign: 'left', marginBottom: 0, fontStyle: 'italic' }}>{getGreeting()}</Text>
             {userName ? (
-              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600', textAlign: 'left', marginTop: 2 }}>{userName}</Text>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600', textAlign: 'left', marginTop: 2, fontStyle: 'italic' }}>{userName}</Text>
             ) : null}
           </View>
         </View>
@@ -608,8 +608,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    borderWidth: 2,
-    borderColor: '#fff',
     backgroundColor: '#222',
   },
   title: {
