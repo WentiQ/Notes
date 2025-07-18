@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import AsyncStorage from './AsyncStorage';
 import NoteDetail, { Note as NoteType } from './NoteDetail';
+import PinScreen from './src/screens/PinScreen';
+import { getPin } from './src/utils/pin';
+import SettingsScreen from './src/screens/SettingsScreen';
 import {
   SafeAreaView,
   Text,
@@ -18,11 +21,26 @@ import {
 const logo = require('./assets/logo.png');
 
 export default function App() {
-  // Hierarchical notes: each note can have subnotes
+  // PIN lock state
+  const [locked, setLocked] = useState(false);
+  const [loading, setLoading] = useState(true);
+  // Notes state
   const [note, setNote] = useState('');
   const [notes, setNotes] = useState<NoteType[]>([]);
-  // AsyncStorage key
   const NOTES_KEY = 'NOTES_DATA';
+  const [page, setPage] = useState<'Notes' | 'Archive' | 'Settings' | 'Detail'>('Notes');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [noteStack, setNoteStack] = useState<{ note: NoteType; parent: NoteType[] }[]>([]); // For navigation
+
+  // Check PIN on mount
+  useEffect(() => {
+    (async () => {
+      const pin = await getPin();
+      if (pin) setLocked(true);
+      setLoading(false);
+    })();
+  }, []);
+
   // Load notes from AsyncStorage on mount
   useEffect(() => {
     (async () => {
@@ -47,9 +65,6 @@ export default function App() {
       }
     })();
   }, [notes]);
-  const [page, setPage] = useState<'Notes' | 'Archive' | 'Settings' | 'Detail'>('Notes');
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [noteStack, setNoteStack] = useState<{ note: NoteType; parent: NoteType[] }[]>([]); // For navigation
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -180,12 +195,13 @@ export default function App() {
   );
 
   const renderSettingsPage = () => (
-    <View style={styles.pageCenter}>
-      <Text style={styles.title}>⚙️ Settings</Text>
-      <Text style={{ color: '#fff' }}>Dark Mode: On</Text>
-    </View>
+    <SettingsScreen />
   );
 
+  if (loading) return null;
+  if (locked) {
+    return <PinScreen onSuccess={() => setLocked(false)} />;
+  }
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
