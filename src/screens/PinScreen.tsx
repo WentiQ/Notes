@@ -7,6 +7,20 @@ export default function PinScreen({ onSuccess }: { onSuccess: () => void }) {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
 
+  // Shake animation state
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+
+  const triggerShake = () => {
+    shakeAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 1, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -1, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 1, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -1, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  };
+
   const handleSubmit = async () => {
     const valid = await checkPin(pin);
     if (valid) {
@@ -14,6 +28,7 @@ export default function PinScreen({ onSuccess }: { onSuccess: () => void }) {
     } else {
       setError('Invalid PIN. Try again.');
       setPin('');
+      triggerShake();
     }
   };
 
@@ -89,16 +104,29 @@ export default function PinScreen({ onSuccess }: { onSuccess: () => void }) {
         <Image source={logo} style={styles.logoLarge} resizeMode="cover" />
       </View>
       <Text style={styles.title}>Enter your PIN</Text>
-      <TextInput
-        style={styles.input}
-        secureTextEntry
-        keyboardType="number-pad"
-        value={pin}
-        onChangeText={setPin}
-        maxLength={4}
-        placeholder="••••"
-        placeholderTextColor="#888"
-      />
+      <Animated.View style={{
+        width: '100%',
+        alignItems: 'center',
+        transform: [
+          {
+            translateX: shakeAnim.interpolate({
+              inputRange: [-1, 1],
+              outputRange: [-12, 12],
+            }),
+          },
+        ],
+      }}>
+        <TextInput
+          style={styles.input}
+          secureTextEntry
+          keyboardType="number-pad"
+          value={pin}
+          onChangeText={setPin}
+          maxLength={4}
+          placeholder="••••"
+          placeholderTextColor="#888"
+        />
+      </Animated.View>
       <TouchableOpacity style={styles.unlockButton} onPress={handleSubmit} activeOpacity={0.85}>
         <Text style={styles.unlockButtonText}>Unlock</Text>
       </TouchableOpacity>
