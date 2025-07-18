@@ -102,6 +102,34 @@ export default function App() {
     setNoteStack(stackCopy);
   };
 
+  // Helper to find a note's parent array in the tree (returns the parent array containing the note)
+  const findParentArray = (target: NoteType, notesArr: NoteType[]): NoteType[] | null => {
+    for (const note of notesArr) {
+      if (note.id === target.id) return notesArr;
+      if (note.subnotes && note.subnotes.length > 0) {
+        if (note.subnotes.some(sn => sn.id === target.id)) {
+          return note.subnotes;
+        }
+        const found = findParentArray(target, note.subnotes);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  // Helper to find the full path (stack) to a note in the tree
+  const findNoteStack = (target: NoteType, notesArr: NoteType[], path: { note: NoteType; parent: NoteType[] }[] = []): { note: NoteType; parent: NoteType[] }[] | null => {
+    for (const note of notesArr) {
+      const newPath = [...path, { note, parent: notesArr }];
+      if (note.id === target.id) return newPath;
+      if (note.subnotes && note.subnotes.length > 0) {
+        const found = findNoteStack(target, note.subnotes, newPath);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
   // Render a list of notes (main or subnotes)
   const renderNotesList = (notesArr: NoteType[], onNotePress: (note: NoteType, parent: NoteType[]) => void) => (
     <FlatList
@@ -132,7 +160,16 @@ export default function App() {
     return (
       <FlowChartScreen
         route={{ params: { root: flowChartRoot } }}
-        navigation={{ goBack: () => setPage('Notes') }}
+        navigation={{
+          goBack: () => setPage('Notes'),
+          openNoteDetail: (note: NoteType) => {
+            const stack = findNoteStack(note, notes);
+            if (stack) {
+              setNoteStack(stack);
+              setPage('Detail');
+            }
+          },
+        }}
       />
     );
   };
@@ -149,15 +186,6 @@ export default function App() {
         value={note}
         onChangeText={setNote}
       />
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={styles.addNoteButton}
-          onPress={addNote}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.addNoteButtonText}>Add Note</Text>
-        </TouchableOpacity>
-      </View>
       {renderNotesList(notes, (note, parent) => {
         setNoteStack([{ note, parent }]);
         setPage('Detail');
@@ -208,6 +236,7 @@ export default function App() {
           setPage('FlowChart');
         }}
         logo={logo as number}
+        editingName={current.note.text === ''}
       />
     );
   };
@@ -223,6 +252,17 @@ export default function App() {
     <SettingsScreen />
   );
 
+  // Add note and open NoteDetail for editing name
+  const handleAddNoteAndEdit = () => {
+    const newNote: NoteType = { id: Date.now().toString(), text: '', subnotes: [] };
+    setNotes(prev => [...prev, newNote]);
+    setNoteStack([{ note: newNote, parent: notes }]);
+    setPage('Detail');
+    setTimeout(() => {
+      // This will be handled by NoteDetail via a prop
+    }, 0);
+  };
+
   if (loading) return null;
   if (locked) {
     return <PinScreen onSuccess={() => setLocked(false)} />;
@@ -236,6 +276,17 @@ export default function App() {
         {page === 'Settings' && renderSettingsPage()}
         {page === 'FlowChart' && renderFlowChartPage()}
       </View>
+
+      {/* Floating Add Button (FAB) */}
+      {page === 'Notes' && !keyboardVisible && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={handleAddNoteAndEdit}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.fabIcon}>＋</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Navigation Bar */}
       {!keyboardVisible && page !== 'FlowChart' && (
@@ -350,18 +401,27 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: 'bold',
   },
-  addNoteButton: {
-    backgroundColor: '#000',
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#fff',
-    paddingVertical: 12,
+  fab: {
+    position: 'absolute',
+    right: 28,
+    bottom: 90,
+    backgroundColor: '#6cf',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    zIndex: 10,
   },
-  addNoteButtonText: {
+  fabIcon: {
     color: '#fff',
+    fontSize: 36,
     fontWeight: 'bold',
-    fontSize: 16,
+    marginTop: -2,
   },
 });

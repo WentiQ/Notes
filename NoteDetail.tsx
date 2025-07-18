@@ -9,6 +9,7 @@ import {
   ScrollView,
   Modal,
   BackHandler,
+  TouchableWithoutFeedback,
 } from 'react-native';
 
 export interface Note {
@@ -26,6 +27,7 @@ export interface NoteDetailProps {
   onOpenSubnote: (subnote: Note) => void;
   onOpenFlowChart: (note: Note) => void;
   logo: number;
+  editingName?: boolean;
 }
 
 export default function NoteDetail({
@@ -36,6 +38,7 @@ export default function NoteDetail({
   onOpenSubnote,
   onOpenFlowChart,
   logo,
+  editingName: editingNameProp = false,
 }: NoteDetailProps) {
   const [currentSubnote, setCurrentSubnote] = useState<Note | null>(null);
   const [editingContent, setEditingContent] = useState(false);
@@ -43,6 +46,8 @@ export default function NoteDetail({
   const [showSubnotesModal, setShowSubnotesModal] = useState(false);
   const [showAddSubnoteInput, setShowAddSubnoteInput] = useState(false);
   const [newSubnoteText, setNewSubnoteText] = useState('');
+  const [editingName, setEditingName] = useState(editingNameProp);
+  const [nameText, setNameText] = useState(note.text);
 
   useEffect(() => {
     const backAction = () => {
@@ -65,6 +70,14 @@ export default function NoteDetail({
 
     return () => backHandler.remove();
   }, [currentSubnote, showSubnotesModal, onBack]);
+
+  useEffect(() => {
+    setNameText(note.text);
+  }, [note.text]);
+
+  useEffect(() => {
+    if (editingNameProp) setEditingName(true);
+  }, [editingNameProp]);
 
   const saveContent = () => {
     const updatedNote = {
@@ -104,6 +117,17 @@ export default function NoteDetail({
     onUpdateNote(updatedNote);
   };
 
+  // Save name if editingName is true and user taps outside
+  const handleNameBlur = () => {
+    if (editingName) {
+      const trimmed = nameText.trim();
+      if (trimmed && trimmed !== note.text) {
+        onUpdateNote({ ...note, text: trimmed });
+      }
+      setEditingName(false);
+    }
+  };
+
   if (currentSubnote) {
     // Provide a local onAddSubnote that only updates the current subnote's subnotes
     const handleAddSubnoteToCurrent = (newSubnote: Note) => {
@@ -129,145 +153,166 @@ export default function NoteDetail({
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Text style={styles.headerNoteName} numberOfLines={1}>
-          {note.text}
-        </Text>
-        <View style={styles.headerRightIcons}>
-          {editingContent ? (
-            <TouchableOpacity onPress={saveContent} style={styles.editIcon}>
-              <Text style={styles.editIconText}>✔</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              onPress={() => setEditingContent(true)}
-              style={styles.editIcon}
-            >
-              <Text style={styles.editIconText}>✎</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            onPress={() => setShowSubnotesModal(true)}
-            style={styles.subnotesIcon}
-          >
-            <Text style={styles.editIconText}>☰</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <ScrollView
-        style={styles.contentScroll}
-        contentContainerStyle={{ flexGrow: 1 }}
-      >
-        {editingContent ? (
-          <View style={styles.editInputRow}>
+    <TouchableWithoutFeedback onPress={handleNameBlur} accessible={false}>
+      <View style={styles.container}>
+        <View style={styles.headerRow}>
+          {editingName ? (
             <TextInput
-              style={styles.editInput}
-              value={contentText}
-              onChangeText={setContentText}
-              multiline
+              style={[styles.headerNoteName, { backgroundColor: '#222', paddingHorizontal: 8, borderRadius: 6 }]}
+              value={nameText}
+              onChangeText={setNameText}
               autoFocus
-              placeholder="Write something..."
+              onBlur={handleNameBlur}
+              placeholder="Note name"
               placeholderTextColor="#aaa"
               returnKeyType="done"
+              onSubmitEditing={handleNameBlur}
+              maxLength={100}
             />
-          </View>
-        ) : (
-          <Text style={styles.contentText}>
-            {note.content || 'No content yet. Tap ✎ to write.'}
-          </Text>
-        )}
-      </ScrollView>
-
-      <Modal
-        visible={showSubnotesModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowSubnotesModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Subnotes</Text>
-            {note.subnotes.length === 0 ? (
-              <Text style={styles.noSubnotesText}>No subnotes yet.</Text>
-            ) : (
-              <FlatList
-                data={note.subnotes}
-                keyExtractor={item => item.id}
-                renderItem={({ item }) => (
-                  <View style={styles.modalNoteRow}>
-                    <TouchableOpacity
-                      style={{ flex: 1 }}
-                      onPress={() => {
-                        setShowSubnotesModal(false);
-                        setCurrentSubnote(item);
-                      }}
-                    >
-                      <Text style={styles.modalNoteText}>{item.text}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setShowSubnotesModal(false);
-                        onOpenFlowChart(item);
-                      }}
-                      style={{ marginLeft: 10 }}
-                    >
-                      <Text style={styles.flowChartIcon}>⭕</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              />
-            )}
-            <View style={{ marginTop: 16, width: '100%' }}>
-              {showAddSubnoteInput ? (
-                <View style={{ alignItems: 'center' }}>
-                  <TextInput
-                    style={[styles.editInput, { width: '90%', marginBottom: 8 }]}
-                    value={newSubnoteText}
-                    onChangeText={setNewSubnoteText}
-                    placeholder="Subnote title"
-                    placeholderTextColor="#aaa"
-                    autoFocus
-                    onSubmitEditing={handleAddSubnoteConfirm}
-                  />
-                  <View style={{ flexDirection: 'row' }}>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setShowAddSubnoteInput(false);
-                        setNewSubnoteText('');
-                      }}
-                      style={[styles.modalCloseButton, { marginRight: 8 }]}
-                    >
-                      <Text style={styles.modalCloseText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={handleAddSubnoteConfirm}
-                      style={styles.modalAddButton}
-                    >
-                      <Text style={styles.modalAddButtonText}>Add</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  onPress={() => setShowAddSubnoteInput(true)}
-                  style={[styles.modalAddButton, { alignSelf: 'center', marginBottom: 8 }]}
-                >
-                  <Text style={styles.modalAddButtonText}>Add Subnote</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            <TouchableOpacity
-              onPress={() => setShowSubnotesModal(false)}
-              style={styles.modalCloseButton}
+          ) : (
+            <Text
+              style={styles.headerNoteName}
+              numberOfLines={1}
+              onLongPress={() => setEditingName(true)}
             >
-              <Text style={styles.modalCloseText}>Close</Text>
+              {note.text}
+            </Text>
+          )}
+          <View style={styles.headerRightIcons}>
+            {editingContent ? (
+              <TouchableOpacity onPress={saveContent} style={styles.editIcon}>
+                <Text style={styles.editIconText}>✔</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={() => setEditingContent(true)}
+                style={styles.editIcon}
+              >
+                <Text style={styles.editIconText}>✎</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => setShowSubnotesModal(true)}
+              style={styles.subnotesIcon}
+            >
+              <Text style={styles.editIconText}>☰</Text>
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
-    </View>
+
+        <ScrollView
+          style={styles.contentScroll}
+          contentContainerStyle={{ flexGrow: 1 }}
+        >
+          {editingContent ? (
+            <View style={styles.editInputRow}>
+              <TextInput
+                style={styles.editInput}
+                value={contentText}
+                onChangeText={setContentText}
+                multiline
+                autoFocus
+                placeholder="Write something..."
+                placeholderTextColor="#aaa"
+                returnKeyType="done"
+              />
+            </View>
+          ) : (
+            <Text style={styles.contentText}>
+              {note.content || 'No content yet. Tap ✎ to write.'}
+            </Text>
+          )}
+        </ScrollView>
+
+        <Modal
+          visible={showSubnotesModal}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setShowSubnotesModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Subnotes</Text>
+              {note.subnotes.length === 0 ? (
+                <Text style={styles.noSubnotesText}>No subnotes yet.</Text>
+              ) : (
+                <FlatList
+                  data={note.subnotes}
+                  keyExtractor={item => item.id}
+                  renderItem={({ item }) => (
+                    <View style={styles.modalNoteRow}>
+                      <TouchableOpacity
+                        style={{ flex: 1 }}
+                        onPress={() => {
+                          setShowSubnotesModal(false);
+                          setCurrentSubnote(item);
+                        }}
+                      >
+                        <Text style={styles.modalNoteText}>{item.text}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setShowSubnotesModal(false);
+                          onOpenFlowChart(item);
+                        }}
+                        style={{ marginLeft: 10 }}
+                      >
+                        <Text style={styles.flowChartIcon}>⭕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                />
+              )}
+              <View style={{ marginTop: 16, width: '100%' }}>
+                {showAddSubnoteInput ? (
+                  <View style={{ alignItems: 'center' }}>
+                    <TextInput
+                      style={[styles.editInput, { width: '90%', marginBottom: 8 }]}
+                      value={newSubnoteText}
+                      onChangeText={setNewSubnoteText}
+                      placeholder="Subnote title"
+                      placeholderTextColor="#aaa"
+                      autoFocus
+                      onSubmitEditing={handleAddSubnoteConfirm}
+                    />
+                    <View style={{ flexDirection: 'row' }}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setShowAddSubnoteInput(false);
+                          setNewSubnoteText('');
+                        }}
+                        style={[styles.modalCloseButton, { marginRight: 8 }]}
+                      >
+                        <Text style={styles.modalCloseText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={handleAddSubnoteConfirm}
+                        style={styles.modalAddButton}
+                      >
+                        <Text style={styles.modalAddButtonText}>Add</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => setShowAddSubnoteInput(true)}
+                    style={[styles.modalAddButton, { alignSelf: 'center', marginBottom: 8 }]}
+                  >
+                    <Text style={styles.modalAddButtonText}>Add Subnote</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowSubnotesModal(false)}
+                style={styles.modalCloseButton}
+              >
+                <Text style={styles.modalCloseText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    </TouchableWithoutFeedback>
   );
 }
 
