@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 const USER_NAME_KEY = 'USER_NAME';
 import AsyncStorage from './AsyncStorage';
-import NoteDetail, { Note as NoteType } from './NoteDetail';
+import NoteDetail, { Note as NoteTypeBase } from './NoteDetail';
+
+// Extend NoteType to include createdAt
+type NoteType = NoteTypeBase & { createdAt?: string };
 
 type FlatNote = NoteType & { parent: NoteType | null };
 import PinScreen from './src/screens/PinScreen';
@@ -28,6 +31,34 @@ import {
 const logo = require('./assets/logo.png');
 
 export default function App() {
+  // Helper to get all descendant ids of a note (including itself)
+  const getAllDescendantIds = (note: NoteType): string[] => {
+    let ids = [note.id];
+    if (note.subnotes && note.subnotes.length > 0) {
+      for (const sub of note.subnotes) {
+        ids = ids.concat(getAllDescendantIds(sub));
+      }
+    }
+    return ids;
+  };
+  // Checklist state for study modal
+  const [studyModalSelected, setStudyModalSelected] = useState<{ [id: string]: boolean }>({});
+  // Study mode notes modal state
+  const [studyNotesModalVisible, setStudyNotesModalVisible] = useState(false);
+  // Track the stack of notes being viewed in the modal (for subnotes navigation)
+  const [studyModalStack, setStudyModalStack] = useState<NoteType[][]>([]);
+  // Helper to find the stack to a note by id (works for any subnote)
+  const findNoteStackById = (id: string, notesArr: NoteType[], path: { note: NoteType; parent: NoteType[] }[] = []): { note: NoteType; parent: NoteType[] }[] | null => {
+    for (const note of notesArr) {
+      const newPath = [...path, { note, parent: notesArr }];
+      if (note.id === id) return newPath;
+      if (note.subnotes && note.subnotes.length > 0) {
+        const found = findNoteStackById(id, note.subnotes, newPath);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
   // PIN lock state
   const [locked, setLocked] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -35,7 +66,7 @@ export default function App() {
   const [note, setNote] = useState('');
   const [notes, setNotes] = useState<NoteType[]>([]);
   const NOTES_KEY = 'NOTES_DATA';
-  const [page, setPage] = useState<'Notes' | 'Archive' | 'Settings' | 'Detail' | 'FlowChart'>('Notes');
+  const [page, setPage] = useState<'Notes' | 'Archive' | 'Settings' | 'Detail' | 'FlowChart' | 'Study'>('Notes');
   const [flowChartRoot, setFlowChartRoot] = useState<NoteType | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [noteStack, setNoteStack] = useState<{ note: NoteType; parent: NoteType[] }[]>([]); // For navigation
@@ -146,7 +177,7 @@ export default function App() {
   const addNote = () => {
     if (note.trim() === '') return;
     if (page === 'Notes') {
-      setNotes([...notes, { id: Date.now().toString(), text: note, subnotes: [] }]);
+      setNotes([...notes, { id: Date.now().toString(), text: note, subnotes: [], createdAt: new Date().toISOString() }]);
     }
     setNote('');
   };
@@ -154,17 +185,19 @@ export default function App() {
   // Add subnote to a note in the stack
   const addSubnoteToStack = (newSubnote: NoteType) => {
     if (!newSubnote.text.trim() || noteStack.length === 0) return;
+    // Add createdAt if not present
+    const subWithDate = { ...newSubnote, createdAt: newSubnote.createdAt || new Date().toISOString() };
     const stackCopy = [...noteStack];
     const current = stackCopy[stackCopy.length - 1];
     const addSubnote = (notesArr: NoteType[]): NoteType[] =>
       notesArr.map(n =>
         n.id === current.note.id
-          ? { ...n, subnotes: [...n.subnotes, newSubnote] }
+          ? { ...n, subnotes: [...n.subnotes, subWithDate] }
           : { ...n, subnotes: addSubnote(n.subnotes) }
       );
     setNotes(addSubnote(notes));
     // Also update stack to reflect new subnote
-    current.note.subnotes.push(newSubnote);
+    current.note.subnotes.push(subWithDate);
     setNoteStack(stackCopy);
   };
 
@@ -230,6 +263,11 @@ export default function App() {
             }}
           >
             <Text style={[styles.noteText, deleteMode && selectedNotes.includes(item.id) && { color: '#f44', fontWeight: 'bold' }]}>{item.text}</Text>
+            {item.createdAt && (
+              <Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>
+                {new Date(item.createdAt).toLocaleString()}
+              </Text>
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => {
@@ -350,10 +388,11 @@ export default function App() {
                       onPress={() => {
                         setSearchDropdown(false);
                         setSearch('');
-                        setTimeout(() => {
-                          setNoteStack([{ note: n, parent: n.parent ? [n.parent] : [] }]);
+                        const stack = findNoteStackById(n.id, notes);
+                        if (stack) {
+                          setNoteStack(stack);
                           setPage('Detail');
-                        }, 0);
+                        }
                       }}
                     >
                       <Text style={styles.searchResultTitle}>{n.text}</Text>
@@ -380,12 +419,175 @@ export default function App() {
           <TouchableOpacity
             style={styles.deleteButton}
             onPress={startDeleteQueue}
+            activeOpacity={0.85}
           >
             <Text style={styles.deleteButtonText}>Delete Selected ({selectedNotes.length})</Text>
           </TouchableOpacity>
         )}
       </View>
     </TouchableWithoutFeedback>
+  );
+
+  // State to hold the selected notes tree for Study mode
+  const [studySelectedTree, setStudySelectedTree] = useState<NoteType[]>([]);
+
+  // Helper to filter a notes tree by selected ids, preserving hierarchy
+  const filterNotesBySelected = (notesArr: NoteType[], selected: { [id: string]: boolean }): NoteType[] => {
+    return notesArr
+      .map(n => {
+        if (selected[n.id]) {
+          // If this note is selected, include it and all its subnotes (recursively filtered)
+          return {
+            ...n,
+            subnotes: filterNotesBySelected(n.subnotes, selected),
+          };
+        } else {
+          // If not selected, skip
+          return null;
+        }
+      })
+      .filter(Boolean) as NoteType[];
+  };
+
+  // State to track expanded/collapsed notes in Study page
+  const [studyExpanded, setStudyExpanded] = useState<{ [id: string]: boolean }>({});
+
+  // Recursive render for Study page: checklist for every note and subnote, dropdown for subnotes
+  const renderStudyNotesList = (notesArr: NoteType[], level: number = 0) => (
+    <>
+      {notesArr.map(note => {
+        const hasSelectedSubnotes = note.subnotes && note.subnotes.length > 0;
+        const expanded = !!studyExpanded[note.id];
+        const isLeaf = !note.subnotes || note.subnotes.length === 0;
+
+        // Helper to count leaf descendants and checked leaves
+        function countLeafAndChecked(n: NoteType): { total: number; checked: number } {
+          if (!n.subnotes || n.subnotes.length === 0) {
+            return { total: 1, checked: studyModalSelected[n.id] ? 1 : 0 };
+          }
+          return n.subnotes.reduce(
+            (acc, sub) => {
+              const res = countLeafAndChecked(sub);
+              return { total: acc.total + res.total, checked: acc.checked + res.checked };
+            },
+            { total: 0, checked: 0 }
+          );
+        }
+        let percent = null;
+        if (!isLeaf) {
+          const { total, checked } = countLeafAndChecked(note);
+          if (total > 0) {
+            percent = Math.round((checked / total) * 100);
+          }
+        }
+
+        // Color palette for nesting
+        const borderColors = ['#6cf', '#f6c', '#fc6', '#6f6', '#f66', '#66f', '#ccc'];
+        const bgColors = [
+          'rgba(30,30,40,0.98)',
+          'rgba(40,30,50,0.98)',
+          'rgba(30,40,50,0.98)',
+          'rgba(40,40,30,0.98)',
+          'rgba(50,30,30,0.98)',
+          'rgba(30,50,30,0.98)',
+          'rgba(50,50,50,0.98)'
+        ];
+        const borderColor = borderColors[level % borderColors.length];
+        const bgColor = bgColors[level % bgColors.length];
+
+        return (
+          <View
+            key={note.id}
+            style={{
+              borderLeftWidth: 4,
+              borderColor: borderColor,
+              backgroundColor: bgColor,
+              borderRadius: 10,
+              marginTop: 8,
+              marginBottom: 0,
+              marginLeft: level === 0 ? 0 : 8,
+              paddingVertical: 10,
+              paddingHorizontal: 10,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.10,
+              shadowRadius: 3,
+              elevation: 1,
+              minHeight: 54,
+              // Remove alignItems: 'center' and flexDirection: 'row' from outer card
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {/* Checklist button only for leaf notes */}
+              {isLeaf && (
+                <TouchableOpacity
+                  onPress={() => {
+                    const ids = getAllDescendantIds(note);
+                    setStudyModalSelected(sel => {
+                      const checked = !sel[note.id];
+                      const updated = { ...sel };
+                      ids.forEach(id => {
+                        updated[id] = checked;
+                      });
+                      return updated;
+                    });
+                  }}
+                  style={{ marginRight: 12, width: 28, height: 28, borderRadius: 6, borderWidth: 2, borderColor: '#fff', backgroundColor: studyModalSelected[note.id] ? borderColor : 'transparent', justifyContent: 'center', alignItems: 'center' }}
+                >
+                  {studyModalSelected[note.id] && (
+                    <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              {/* Expand/collapse and note text */}
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setStudyExpanded(exp => ({ ...exp, [note.id]: !expanded }));
+                }}
+              >
+                <Text style={{ color: borderColor, fontSize: 18, fontWeight: 'bold', marginRight: 8 }}>
+                  {expanded ? '▼' : '▶'}
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.noteText, { color: '#fff' }]}>{note.text}</Text>
+                  {note.createdAt && (
+                    <Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>
+                      {new Date(note.createdAt).toLocaleString()}
+                    </Text>
+                  )}
+                </View>
+                {/* Percentage for non-leaf notes */}
+                {!isLeaf && percent !== null && (
+                  <Text style={{ color: borderColor, fontWeight: 'bold', fontSize: 15, marginLeft: 10, minWidth: 38, textAlign: 'right' }}>{percent}%</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+            {/* Render subnotes if expanded, as true children inside this card */}
+            {expanded && hasSelectedSubnotes && (
+              <View style={{ marginTop: 4, marginLeft: 8 }}>
+                {renderStudyNotesList(note.subnotes, level + 1)}
+              </View>
+            )}
+          </View>
+        );
+      })}
+    </>
+  );
+
+  const renderStudyPage = () => (
+    <ScrollView contentContainerStyle={{ paddingBottom: 40 }} horizontal={true}>
+      <View style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+          {studySelectedTree.length === 0 ? (
+            <Text style={{ color: '#fff', marginTop: 24, textAlign: 'center' }}>Welcome to Study mode!</Text>
+          ) : (
+            renderStudyNotesList(studySelectedTree)
+          )}
+        </ScrollView>
+      </View>
+    </ScrollView>
   );
 
   // Helper to update a note in the notes tree
@@ -449,9 +651,17 @@ export default function App() {
 
   // Add note and open NoteDetail for editing name
   const handleAddNoteAndEdit = () => {
-    const newNote: NoteType = { id: Date.now().toString(), text: '', subnotes: [] };
-    setNotes(prev => [...prev, newNote]);
-    setNoteStack([{ note: newNote, parent: notes }]);
+    const newNote: NoteType & { createdAt?: string } = {
+      id: Date.now().toString(),
+      text: '',
+      subnotes: [],
+      createdAt: new Date().toISOString(),
+    };
+    setNotes(prev => {
+      const updated = [...prev, newNote];
+      setNoteStack([{ note: newNote, parent: updated }]);
+      return updated;
+    });
     setPage('Detail');
     setTimeout(() => {
       // This will be handled by NoteDetail via a prop
@@ -509,8 +719,10 @@ export default function App() {
         {page === 'Archive' && renderArchivePage()}
         {page === 'Settings' && renderSettingsPage()}
         {page === 'FlowChart' && renderFlowChartPage()}
+        {page === 'Study' && renderStudyPage()}
       </View>
 
+      {/* Floating Add Button (FAB) */}
       {/* Floating Add Button (FAB) */}
       {page === 'Notes' && !keyboardVisible && (
         <TouchableOpacity
@@ -521,11 +733,129 @@ export default function App() {
           <Text style={styles.fabIcon}>＋</Text>
         </TouchableOpacity>
       )}
+      {page === 'Study' && !keyboardVisible && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => {
+            setStudyModalStack([notes]);
+            setStudyNotesModalVisible(true);
+            setStudyModalSelected({}); // Optionally clear selection on open
+          }}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.fabIcon}>＋</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Study Notes Modal */}
+      <RNModal
+        visible={studyNotesModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setStudyNotesModalVisible(false);
+          setStudyModalStack([]);
+        }}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#222', borderRadius: 12, padding: 20, width: '85%', maxHeight: '70%' }}>
+            <Text style={{ color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' }}>
+              {studyModalStack.length > 1 ? 'Subnotes' : 'All Notes'}
+            </Text>
+            {studyModalStack.length > 1 && (
+              <TouchableOpacity
+                style={{ marginBottom: 10, alignSelf: 'flex-start' }}
+                onPress={() => setStudyModalStack(stack => stack.slice(0, -1))}
+              >
+                <Text style={{ color: '#6cf', fontSize: 16 }}>{'← Back'}</Text>
+              </TouchableOpacity>
+            )}
+            <FlatList
+              data={studyModalStack[studyModalStack.length - 1] || []}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => (
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#333' }}>
+                  {/* Checklist */}
+                  <TouchableOpacity
+                    onPress={() => {
+                      const ids = getAllDescendantIds(item);
+                      setStudyModalSelected(sel => {
+                        const checked = !sel[item.id];
+                        const updated = { ...sel };
+                        ids.forEach(id => {
+                          updated[id] = checked;
+                        });
+                        return updated;
+                      });
+                    }}
+                    style={{ marginRight: 12, width: 28, height: 28, borderRadius: 6, borderWidth: 2, borderColor: '#fff', backgroundColor: studyModalSelected[item.id] ? '#6cf' : 'transparent', justifyContent: 'center', alignItems: 'center' }}
+                  >
+                    {studyModalSelected[item.id] && (
+                      <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>✓</Text>
+                    )}
+                  </TouchableOpacity>
+                  <Text style={{ color: '#fff', fontSize: 16, flex: 1 }}>{item.text}</Text>
+                  <TouchableOpacity
+                    onPress={() => setStudyModalStack(stack => [...stack, item.subnotes || []])}
+                    style={{ padding: 4 }}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 20, marginLeft: 8 }}>→</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              ListEmptyComponent={<Text style={{ color: '#aaa', textAlign: 'center', marginVertical: 20 }}>No notes found.</Text>}
+              style={{ marginBottom: 12 }}
+            />
+            <View style={{ flexDirection: 'row', marginTop: 8 }}>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#6cf', borderRadius: 8, paddingVertical: 12, alignItems: 'center', marginRight: 8 }}
+                onPress={() => {
+                  // Build the selected notes tree and merge with existing studySelectedTree
+                  const selectedTree = filterNotesBySelected(notes, studyModalSelected);
+                  // Helper to merge two trees by id, preserving all unique notes and merging subnotes
+                  function mergeNotesTree(base: NoteType[], add: NoteType[]): NoteType[] {
+                    // Helper to merge two arrays of notes by id, preventing duplicates
+                    const map = new Map(base.map(n => [n.id, n]));
+                    for (const n of add) {
+                      if (map.has(n.id)) {
+                        // Merge subnotes recursively, but do not duplicate
+                        const mergedSubnotes = mergeNotesTree(map.get(n.id)!.subnotes, n.subnotes);
+                        map.set(n.id, {
+                          ...map.get(n.id)!,
+                          subnotes: mergedSubnotes,
+                        });
+                      } else {
+                        // Add only if not present
+                        map.set(n.id, { ...n, subnotes: mergeNotesTree([], n.subnotes) });
+                      }
+                    }
+                    return Array.from(map.values());
+                  }
+                  setStudySelectedTree(prev => mergeNotesTree(prev, selectedTree));
+                  setStudyNotesModalVisible(false);
+                  setStudyModalStack([]);
+                }}
+              >
+                <Text style={{ color: '#222', fontWeight: 'bold' }}>Add</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#444', borderRadius: 8, paddingVertical: 12, alignItems: 'center' }}
+                onPress={() => {
+                  setStudyNotesModalVisible(false);
+                  setStudyModalStack([]);
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </RNModal>
 
       {/* Navigation Bar */}
       {!keyboardVisible && page !== 'FlowChart' && (
         <View style={styles.navBar}>
-          {(['Notes', 'Archive', 'Settings'] as const).map(p => {
+          {(['Notes', 'Archive', 'Study', 'Settings'] as const).map(p => {
             const isActive = page === p;
             return (
               <TouchableOpacity
@@ -602,13 +932,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 18,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
   },
   logoCircular: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: '#222',
+    // borderWidth: 2,
+    // borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 3,
   },
   title: {
     fontSize: 24,
@@ -729,10 +1076,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 10,
-    backgroundColor: '#111',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.3)',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginVertical: 6,
+    marginHorizontal: 2,
+    backgroundColor: 'rgba(30,30,30,0.98)',
+    borderRadius: 14,
+    borderWidth: 1.2,
+    borderColor: 'rgba(255,255,255,0.10)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.13,
+    shadowRadius: 6,
+    elevation: 2,
+    minHeight: 54,
   },
   flowChartIcon: {
     fontSize: 20,
@@ -741,6 +1098,9 @@ const styles = StyleSheet.create({
   },
   noteText: {
     color: '#fff',
+    fontSize: 17,
+    fontWeight: '500',
+    letterSpacing: 0.1,
   },
   pageCenter: {
     flex: 1,
@@ -751,12 +1111,23 @@ const styles = StyleSheet.create({
   navBar: {
     flexDirection: 'row',
     backgroundColor: '#111',
-    padding: 10,
-    margin: 10,
-    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 0,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     justifyContent: 'space-around',
-    borderWidth: 1.5,
-    borderColor: '#fff',
+    margin: 0,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 12,
   },
   navItem: {
     paddingVertical: 8,
@@ -780,31 +1151,45 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 28,
     bottom: 90,
-    backgroundColor: '#fff',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    backgroundColor: '#111',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 6,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.32,
+    shadowRadius: 8,
     zIndex: 10,
+    borderWidth: 2,
+    borderColor: '#111',
   },
   fabIcon: {
-    color: '#000',
-    fontSize: 36,
+    color: '#fff',
+    fontSize: 38,
     fontWeight: 'bold',
     marginTop: -2,
+    textShadowColor: 'rgba(0,0,0,0.12)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 2,
   },
   deleteButton: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    bottom: 80,
     backgroundColor: '#f44',
     borderRadius: 8,
-    paddingVertical: 12,
+    paddingVertical: 14,
     alignItems: 'center',
-    margin: 16,
+    zIndex: 50,
+    elevation: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
   },
   deleteButtonText: {
     color: '#fff',
