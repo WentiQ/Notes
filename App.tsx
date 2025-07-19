@@ -641,6 +641,35 @@ export default function App() {
                   <Text style={{ color: borderColor, fontWeight: 'bold', fontSize: 15, marginLeft: 10, minWidth: 38, textAlign: 'right' }}>{percent}%</Text>
                 )}
               </TouchableOpacity>
+              {/* Go button for all notes and subnotes */}
+              <TouchableOpacity
+                onPress={() => {
+                  // Find the stack to this note in studySelectedTree
+                  const findStack = (
+                    targetId: string,
+                    notesArr: NoteType[],
+                    path: { note: NoteType; parent: NoteType[] }[] = []
+                  ): { note: NoteType; parent: NoteType[] }[] | null => {
+                    for (const n of notesArr) {
+                      const newPath = [...path, { note: n, parent: notesArr }];
+                      if (n.id === targetId) return newPath;
+                      if (n.subnotes && n.subnotes.length > 0) {
+                        const found = findStack(targetId, n.subnotes, newPath);
+                        if (found) return found;
+                      }
+                    }
+                    return null;
+                  };
+                  const stack = findStack(note.id, studySelectedTree);
+                  if (stack) {
+                    setNoteStack(stack);
+                    setPage('Detail');
+                  }
+                }}
+                style={{ marginLeft: 8, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: borderColor, borderRadius: 6 }}
+              >
+                <Text style={{ color: '#222', fontWeight: 'bold', fontSize: 15 }}>Go</Text>
+              </TouchableOpacity>
             </View>
             {/* Render subnotes if expanded, as true children inside this card */}
             {expanded && hasSelectedSubnotes && (
@@ -657,6 +686,12 @@ export default function App() {
   const renderStudyPage = () => (
     <ScrollView contentContainerStyle={{ paddingBottom: 40 }} horizontal={true}>
       <View style={{ flex: 1, minWidth: '100%' }}>
+        {/* Study Mode Header - left aligned */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 12 }}>
+          <Text style={{ color: '#fff', fontSize: 26, fontWeight: 'bold', textAlign: 'left', letterSpacing: 1 }}>
+            Study Mode
+          </Text>
+        </View>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
           {studySelectedTree.length === 0 ? (
             <Text style={{ color: '#fff', marginTop: 24, textAlign: 'center' }}>Welcome to Study mode!</Text>
