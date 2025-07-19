@@ -684,23 +684,36 @@ export default function App() {
   );
 
   const renderStudyPage = () => (
-    <ScrollView contentContainerStyle={{ paddingBottom: 40 }} horizontal={true}>
-      <View style={{ flex: 1, minWidth: '100%' }}>
-        {/* Study Mode Header - left aligned */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 12 }}>
-          <Text style={{ color: '#fff', fontSize: 26, fontWeight: 'bold', textAlign: 'left', letterSpacing: 1 }}>
-            Study Mode
-          </Text>
-        </View>
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          {studySelectedTree.length === 0 ? (
-            <Text style={{ color: '#fff', marginTop: 24, textAlign: 'center' }}>Welcome to Study mode!</Text>
-          ) : (
-            renderStudyNotesList(studySelectedTree)
-          )}
-        </ScrollView>
+    <View style={{ flex: 1 }}>
+      {/* Study Mode Header - fixed at top left, analytics button right */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 12, zIndex: 10, backgroundColor: '#000', justifyContent: 'space-between' }}>
+        <Text style={{ color: '#fff', fontSize: 26, fontWeight: 'bold', textAlign: 'left', letterSpacing: 1 }}>
+          Study Mode
+        </Text>
+        <TouchableOpacity
+          onPress={() => {
+            // Placeholder for analytics action
+            // You can open a modal or navigate to analytics page here
+          }}
+          style={{ marginLeft: 16, padding: 8, borderRadius: 8, backgroundColor: '#181818', alignItems: 'center', justifyContent: 'center' }}
+          accessibilityLabel="Analytics"
+        >
+          {/* Bar chart icon using emoji for now, can replace with SVG/icon later */}
+          <Text style={{ fontSize: 26, color: '#6cf', fontWeight: 'bold' }}>🧐</Text>
+        </TouchableOpacity>
       </View>
-    </ScrollView>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} horizontal={true}>
+        <View style={{ flex: 1, minWidth: '100%' }}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+            {studySelectedTree.length === 0 ? (
+              <Text style={{ color: '#fff', marginTop: 24, textAlign: 'center' }}>Welcome to Study mode!</Text>
+            ) : (
+              renderStudyNotesList(studySelectedTree)
+            )}
+          </ScrollView>
+        </View>
+      </ScrollView>
+    </View>
   );
 
   // Helper to update a note in the notes tree
