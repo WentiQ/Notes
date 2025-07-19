@@ -92,7 +92,7 @@ export default function App() {
   const [note, setNote] = useState('');
   const [notes, setNotes] = useState<NoteType[]>([]);
   const NOTES_KEY = 'NOTES_DATA';
-  const [page, setPage] = useState<'Notes' | 'Archive' | 'Settings' | 'Detail' | 'FlowChart' | 'Study'>('Notes');
+  const [page, setPage] = useState<'Notes' | 'Archive' | 'Settings' | 'Detail' | 'FlowChart' | 'Study' | 'StudyAnalytics'>('Notes');
   const [flowChartRoot, setFlowChartRoot] = useState<NoteType | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [noteStack, setNoteStack] = useState<{ note: NoteType; parent: NoteType[] }[]>([]); // For navigation
@@ -692,8 +692,7 @@ export default function App() {
         </Text>
         <TouchableOpacity
           onPress={() => {
-            // Placeholder for analytics action
-            // You can open a modal or navigate to analytics page here
+            setPage('StudyAnalytics');
           }}
           style={{ marginLeft: 16, padding: 8, borderRadius: 8, backgroundColor: '#181818', alignItems: 'center', justifyContent: 'center' }}
           accessibilityLabel="Analytics"
@@ -714,6 +713,10 @@ export default function App() {
         </View>
       </ScrollView>
     </View>
+
+
+  // Study Analytics page
+  // Inline rendering in main return to avoid syntax issues
   );
 
   // Helper to update a note in the notes tree
@@ -846,6 +849,10 @@ export default function App() {
         {page === 'Settings' && renderSettingsPage()}
         {page === 'FlowChart' && renderFlowChartPage()}
         {page === 'Study' && renderStudyPage()}
+        {page === 'StudyAnalytics' && (() => {
+          const StudyAnalyticsScreen = require('./src/screens/StudyAnalyticsScreen').default;
+          return <StudyAnalyticsScreen onBack={() => setPage('Study')} />;
+        })()}
       </View>
 
       {/* Floating Add Button (FAB) */}

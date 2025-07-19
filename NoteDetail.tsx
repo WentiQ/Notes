@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Dimensions } from 'react-native';
 import {
   View,
   Text,
@@ -246,8 +247,8 @@ export default function NoteDetail({
         </View>
 
         <ScrollView
-          style={styles.contentScroll}
-          contentContainerStyle={{ paddingBottom: 12 }}
+          style={[styles.contentScroll, { width: Dimensions.get('window').width - 40, alignSelf: 'center' }]}
+          contentContainerStyle={{ paddingBottom: 12, flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={true}
         >
@@ -505,6 +506,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 12,
     minHeight: 100,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   contentScroll: {
     marginBottom: 8,
